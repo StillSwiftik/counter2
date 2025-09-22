@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title></title>
+<meta name="robots" content="noindex, nofollow">
+<link href="https://cdn.jsdelivr.net/npm/remixicon/fonts/remixicon.css" rel="stylesheet">
+<style>
+body {font-family: Arial, sans-serif; background: #1e1e1e; color: #eee; display: flex; flex-direction: column; align-items: center; padding: 30px;}
+.card {background: #2c2c2c; padding: 20px; border-radius: 12px; box-shadow: 0 0 10px #000; max-width: 500px; width: 100%; margin-bottom: 30px;}
+label {display: block; margin-top: 10px;}
+input {width: 100%; padding: 8px; margin-top: 5px; border-radius: 6px; border: none; outline: none;}
+button {margin-top: 15px; width: 100%; padding: 10px; background: #4caf50; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer;}
+button:hover { background: #43a047; }
+.result {margin-top: 20px; padding: 10px; background: #3a3a3a; border-radius: 8px;}
+.copy-btn {background: none; border: none; cursor: pointer; color: #4caf50; font-size: 18px; margin-left: 8px; vertical-align: middle;}
+.copy-btn:hover { color: #66bb6a; }
+.line { margin: 4px 0; }
+</style>
+</head>
+<body>
+
+<div class="card">
+<h2>Калькулятор выгоды (порох/взрывчатка/динамит)</h2>
+<label>Цена пороха (1 шт): <input type="text" id="powder"></label>
+<label>Цена взрывчатого вещества (1 шт): <input type="text" id="explosive"></label>
+<label>Цена динамита (1 шт): <input type="text" id="dynamite"></label>
+<label>Цена Динамит A: <input type="text" id="dynamiteA"></label>
+<label>Цена Динамит B: <input type="text" id="dynamiteB"></label>
+<label>Цена Динамит C4: <input type="text" id="dynamiteC4"></label>
+<label>Цена Динамит Stiller: <input type="text" id="dynamiteStiller"></label>
+<label>Количество: <input type="text" id="count"></label>
+<button onclick="calculate()">Рассчитать</button>
+<div class="result" id="result"></div>
+</div>
+
+<div class="card">
+<h2>Перекрафт в динамит</h2>
+<label>Количество пороха: <input type="text" id="powderToDynamite"></label>
+<label>Количество взрывчатки: <input type="text" id="explosiveToDynamite"></label>
+<button onclick="craftDynamite()">Посчитать</button>
+<div class="result" id="craftResult"></div>
+</div>
+
+<div class="card">
+<h2>Калькулятор выгоды Поршня</h2>
+<label>Цена Поршня: <input type="text" id="piston"></label>
+<label>Цена Дерева: <input type="text" id="wood"></label>
+<label>Цена Булыжника: <input type="text" id="cobble"></label>
+<label>Цена Редстоуна: <input type="text" id="redstone"></label>
+<label>Цена Железа: <input type="text" id="iron"></label>
+<label>Количество: <input type="text" id="pistonCount"></label>
+<button onclick="calculatePiston()">Рассчитать</button>
+<div class="result" id="pistonResult"></div>
+</div>
+
+<script>
+function parseValue(val){
+  if(!val) return 0;
+  val = val.toString().trim().toLowerCase();
+  if(val.endsWith("kk")) return parseFloat(val.replace("kk",""))*1_000_000;
+  if(val.endsWith("k")) return parseFloat(val.replace("k",""))*1_000;
+  if(val.endsWith("m")) return parseFloat(val.replace("m",""))*1_000_000;
+  if(val.endsWith("b")) return parseFloat(val.replace("b",""))*1_000_000_000;
+  return parseFloat(val);
+}
+function copyPrice(value){ navigator.clipboard.writeText(value.toString().replace(/\s/g,"")); }
+
+function getUrlParams() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const params = {};
+  
+  const paramMapping = {
+    'poroh': 'powder',
+    'vzriv_veschestvo': 'explosive', 
+    'dynamit': 'dynamite',
+    'dynamitA': 'dynamiteA',
+    'dynamitB': 'dynamiteB',
+    'dynamitC4': 'dynamiteC4',
+    'dynamitStiller': 'dynamiteStiller',
+    'count': 'count',
+    'powderToDynamite': 'powderToDynamite',
+    'explosiveToDynamite': 'explosiveToDynamite',
+    'piston': 'piston',
+    'wood': 'wood',
+    'cobble': 'cobble',
+    'redstone': 'redstone',
+    'iron': 'iron',
+    'pistonCount': 'pistonCount'
+  };
+  
+  for (const [urlParam, inputId] of Object.entries(paramMapping)) {
+    const value = urlParams.get(urlParam);
+    if (value !== null) {
+      params[inputId] = value;
+    }
+  }
+  
+  return params;
+}
+
+window.onload = function(){
+  const urlParams = getUrlParams();
+  
+  document.querySelectorAll("input").forEach(inp=>{
+    if (urlParams[inp.id]) {
+      inp.value = urlParams[inp.id];
+    }
+    else if(localStorage[inp.id]) {
+      inp.value = localStorage[inp.id];
+    }
+    
+    inp.addEventListener("input",()=>localStorage[inp.id]=inp.value);
+  });
+  
+  const loadedParams = Object.keys(urlParams);
+  if (loadedParams.length > 0) {
+    console.log('Загружены параметры из URL:', urlParams);
+  }
+}
+
+function calcCraftCost(name, prices){
+  const explosiveCost = Math.min(prices.explosive, 9*prices.powder); 
+  const powderCost = prices.powder;
+  
+  switch(name){
+    case "explosive": return explosiveCost;
+    case "dynamite": return Math.min(5*powderCost, explosiveCost);
+    case "dynamiteA": return 2*calcCraftCost("dynamite", prices) + Math.min(5*powderCost, explosiveCost);
+    case "dynamiteB": return 2*calcCraftCost("dynamiteA", prices) + Math.min(5*powderCost, explosiveCost);
+    case "dynamiteC4": return 2*calcCraftCost("dynamiteB", prices) + Math.min(5*powderCost, explosiveCost);
+    case "dynamiteStiller": return 2*calcCraftCost("dynamiteC4", prices) + Math.min(5*powderCost, explosiveCost);
+    default: return 0;
+  }
+}
+
+function getMaterialCounts(itemName, quantity = 1){
+  switch(itemName){
+    case "dynamite":
+      return {dynamite: 0, powder: 5 * quantity, explosive: 0};
+    case "dynamiteA":
+      return {
+        dynamite: 2 * quantity, 
+        powder: 15 * quantity,
+        explosive: 0
+      };
+    case "dynamiteB":
+      return {
+        dynamite: 4 * quantity, 
+        powder: 25 * quantity, 
+        explosive: 0
+      };
+    case "dynamiteC4":
+      return {
+        dynamite: 8 * quantity, 
+        powder: 75 * quantity,
+        explosive: 0
+      };
+    default:
+      return {dynamite: 0, powder: 0, explosive: 0};
+  }
+}
+
+
+function getReadyDynamiteCount(itemName, quantity = 1){
+  switch(itemName){
+    case "dynamiteA":
+      return 2 * quantity; 
+    case "dynamiteB":
+      return 2 * getReadyDynamiteCount("dynamiteA", quantity);
+    case "dynamiteC4":
+      return 2 * getReadyDynamiteCount("dynamiteB", quantity);
+    default:
+      return 0;
+  }
+}
+
+function buildBestCraftPath(name, prices){
+  switch(name){
+    case "powder":
+      return "Купите порох напрямую";
+      
+    case "explosive":
+      if(prices.explosive < 9 * prices.powder){
+        return "Купите взрывчатое вещество напрямую";
+      } else {
+        return "Купите 9 пороха и сделайте взрывчатое вещество";
+      }
+      
+    case "dynamite":
+      const dynamitePowderCost = 5 * prices.powder;
+      const dynamiteExplosiveCost = Math.min(prices.explosive, 9 * prices.powder);
+      if(dynamiteExplosiveCost < dynamitePowderCost){
+        return "Купите взрывчатое вещество и сделайте динамит";
+      } else {
+        return "Купите 5 пороха и сделайте динамит";
+      }
+      
+     case "dynamiteA":
+       const materialsA = getMaterialCounts("dynamiteA", 1);
+       const readyDynamitesA = getReadyDynamiteCount("dynamiteA", 1);
+       const dynamiteCost = calcCraftCost("dynamite", prices);
+       
+       if(prices.dynamite < dynamiteCost){
+         const extraSource = 5 * prices.powder < Math.min(prices.explosive, 9 * prices.powder) ? 
+           `${materialsA.powder} пороха` : 
+           `${Math.ceil(materialsA.powder/9)} взрывчатых веществ (перекрафтите в ${materialsA.powder} пороха)`;
+         return `Купите ${readyDynamitesA} динамитов и ${extraSource}, сделайте динамит А`;
+       } else {
+         const dynamitePowderCost = 5 * prices.powder;
+         const dynamiteExplosiveCost = Math.min(prices.explosive, 9 * prices.powder);
+         
+         if(dynamiteExplosiveCost < dynamitePowderCost){
+           const totalExplosive = Math.ceil(materialsA.powder/9);
+           return `Купите ${totalExplosive} взрывчатых веществ, перекрафтите их в ${materialsA.powder} пороха, сделайте из ${materialsA.powder-5} пороха ${readyDynamitesA} динамитов, добавьте 5 пороха и сделайте динамит А`;
+         } else {
+           return `Купите ${materialsA.powder} пороха, сделайте из ${materialsA.powder-5} пороха ${readyDynamitesA} динамитов, добавьте 5 пороха и сделайте динамит А`;
+         }
+       }
+      
+     case "dynamiteB":
+       const materialsB = getMaterialCounts("dynamiteB", 1);
+       const readyDynamitesB = getReadyDynamiteCount("dynamiteB", 1);
+       const dynamiteACost = calcCraftCost("dynamiteA", prices);
+       
+       if(prices.dynamiteA < dynamiteACost){
+         const extraText = 5 * prices.powder < Math.min(prices.explosive, 9 * prices.powder) ? 
+           "5 пороха" : "1 взрывчатое вещество (перекрафтите в 9 пороха)";
+         return `Купите 2 динамита А и ${extraText}, сделайте динамит Б`;
+       } else {
+         const dynamiteCostForA = calcCraftCost("dynamite", prices);
+         if(prices.dynamite < dynamiteCostForA){
+           const extraSource = 5 * prices.powder < Math.min(prices.explosive, 9 * prices.powder) ? 
+             `${materialsB.powder} пороха` : 
+             `${Math.ceil(materialsB.powder/9)} взрывчатых веществ (перекрафтите в ${materialsB.powder} пороха)`;
+           return `Купите ${readyDynamitesB} динамитов и ${extraSource}, сделайте 2 динамита А, добавьте 5 пороха и сделайте динамит Б`;
+         } else {
+           const dynamitePowderCost = 5 * prices.powder;
+           const dynamiteExplosiveCost = Math.min(prices.explosive, 9 * prices.powder);
+           
+           if(dynamiteExplosiveCost < dynamitePowderCost){
+             const totalExplosive = Math.ceil(materialsB.powder/9);
+             return `Купите ${totalExplosive} взрывчатых веществ, перекрафтите их в ${materialsB.powder} пороха, сделайте из ${materialsB.powder-5} пороха ${readyDynamitesB} динамитов, из ${materialsB.powder-5} пороха и ${readyDynamitesB} динамитов - 2 динамита А, добавьте 5 пороха и сделайте динамит Б`;
+           } else {
+             return `Купите ${materialsB.powder} пороха, сделайте из ${materialsB.powder-5} пороха ${readyDynamitesB} динамитов, из ${materialsB.powder-5} пороха и ${readyDynamitesB} динамитов - 2 динамита А, добавьте 5 пороха и сделайте динамит Б`;
+           }
+         }
+       }
+      
+     case "dynamiteC4":
+       const materialsC4 = getMaterialCounts("dynamiteC4", 1);
+       const readyDynamitesC4 = getReadyDynamiteCount("dynamiteC4", 1);
+       const dynamiteBCost = calcCraftCost("dynamiteB", prices);
+       
+       if(prices.dynamiteB < dynamiteBCost){
+         const extraText = 5 * prices.powder < Math.min(prices.explosive, 9 * prices.powder) ? 
+           "5 пороха" : "1 взрывчатое вещество (перекрафтите в 9 пороха)";
+         return `Купите 2 динамита Б и ${extraText}, сделайте динамит С4`;
+       } else {
+         const dynamiteACostForB = calcCraftCost("dynamiteA", prices);
+         if(prices.dynamiteA < dynamiteACostForB){
+           const extraSource = 5 * prices.powder < Math.min(prices.explosive, 9 * prices.powder) ? 
+             `${materialsC4.powder} пороха` : 
+             `${Math.ceil(materialsC4.powder/9)} взрывчатых веществ (перекрафтите в ${materialsC4.powder} пороха)`;
+           return `Купите 4 динамита А и ${extraSource}, сделайте 2 динамита Б, добавьте 5 пороха и сделайте динамит С4`;
+         } else {
+           const dynamiteCostForChain = calcCraftCost("dynamite", prices);
+           if(prices.dynamite < dynamiteCostForChain){
+             const extraSource = 5 * prices.powder < Math.min(prices.explosive, 9 * prices.powder) ? 
+               `${materialsC4.powder} пороха` : 
+               `${Math.ceil(materialsC4.powder/9)} взрывчатых веществ (перекрафтите в ${materialsC4.powder} пороха)`;
+             return `Купите ${readyDynamitesC4} динамитов и ${extraSource}, сделайте 4 динамита А, сделайте 2 динамита Б, добавьте 5 пороха и сделайте динамит С4`;
+           } else {
+             const dynamitePowderCost = 5 * prices.powder;
+             const dynamiteExplosiveCost = Math.min(prices.explosive, 9 * prices.powder);
+             
+             if(dynamiteExplosiveCost < dynamitePowderCost){
+               const totalExplosive = Math.ceil(materialsC4.powder/9);
+               return `Купите ${totalExplosive} взрывчатых веществ, перекрафтите их в ${materialsC4.powder} пороха, сделайте из 40 пороха ${readyDynamitesC4} динамитов, из 20 пороха и ${readyDynamitesC4} динамитов - 4 динамита А, из 10 пороха и 4 динамитов А - 2 динамита Б, добавьте 5 пороха и сделайте динамит С4`;
+             } else {
+               return `Купите ${materialsC4.powder} пороха, сделайте из 40 пороха ${readyDynamitesC4} динамитов, из 20 пороха и ${readyDynamitesC4} динамитов - 4 динамита А, из 10 пороха и 4 динамитов А - 2 динамита Б, добавьте 5 пороха и сделайте динамит С4`;
+             }
+           }
+         }
+       }
+      
+     case "dynamiteStiller":
+       const dynamiteC4Cost = calcCraftCost("dynamiteC4", prices);
+       const extraForStiller = Math.min(5 * prices.powder, Math.min(prices.explosive, 9 * prices.powder));
+       const extraSourceForStiller = 5 * prices.powder < Math.min(prices.explosive, 9 * prices.powder) ? "5 пороха" : "взрывчатое вещество";
+       
+       if(prices.dynamiteC4 < dynamiteC4Cost){
+         const extraText = 5 * prices.powder < Math.min(prices.explosive, 9 * prices.powder) ? "5 пороха" : "1 взрывчатое вещество (перекрафтите в 9 пороха)";
+         return `Купите 2 динамита С4 и ${extraText}, сделайте динамит Стиллер`;
+       } else {
+         return `Сложная цепочка крафта: сначала сделайте динамит С4 по оптимальному пути, затем добавьте ${extraSourceForStiller} и сделайте динамит Стиллер`;
+       }
+       
+     case "twoDynamiteB":
+       const materialsTwoB = getMaterialCounts("dynamiteB", 2);
+       const readyDynamitesTwoB = getReadyDynamiteCount("dynamiteB", 2);
+       const dynamiteACostForTwoB = calcCraftCost("dynamiteA", prices);
+       
+       if(prices.dynamiteA < dynamiteACostForTwoB){
+         const extraText = 5 * prices.powder < Math.min(prices.explosive, 9 * prices.powder) ? 
+           `${materialsTwoB.powder} пороха` : 
+           `${Math.ceil(materialsTwoB.powder/9)} взрывчатых веществ (перекрафтите в ${materialsTwoB.powder} пороха)`;
+         return `Купите 4 динамита А и ${extraText}, сделайте 2 динамита Б`;
+       } else {
+         const dynamiteCostForTwoB = calcCraftCost("dynamite", prices);
+         if(prices.dynamite < dynamiteCostForTwoB){
+           const extraSource = 5 * prices.powder < Math.min(prices.explosive, 9 * prices.powder) ? 
+             `${materialsTwoB.powder} пороха` : 
+             `${Math.ceil(materialsTwoB.powder/9)} взрывчатых веществ (перекрафтите в ${materialsTwoB.powder} пороха)`;
+           return `Купите ${readyDynamitesTwoB} динамитов и ${extraSource}, сделайте 4 динамита А, добавьте 10 пороха и сделайте 2 динамита Б`;
+         } else {
+           const dynamitePowderCost = 5 * prices.powder;
+           const dynamiteExplosiveCost = Math.min(prices.explosive, 9 * prices.powder);
+           
+           if(dynamiteExplosiveCost < dynamitePowderCost){
+             const totalExplosive = Math.ceil(materialsTwoB.powder/9);
+             return `Купите ${totalExplosive} взрывчатых веществ, перекрафтите их в ${materialsTwoB.powder} пороха, сделайте из ${materialsTwoB.powder-10} пороха ${readyDynamitesTwoB} динамитов, из ${materialsTwoB.powder-10} пороха и ${readyDynamitesTwoB} динамитов - 4 динамита А, добавьте 10 пороха и сделайте 2 динамита Б`;
+           } else {
+             return `Купите ${materialsTwoB.powder} пороха, сделайте из ${materialsTwoB.powder-10} пороха ${readyDynamitesTwoB} динамитов, из ${materialsTwoB.powder-10} пороха и ${readyDynamitesTwoB} динамитов - 4 динамита А, добавьте 10 пороха и сделайте 2 динамита Б`;
+           }
+         }
+       }
+       
+     default:
+       return "Нет пути";
+  }
+}
+
+function calculate(){
+  const prices = {
+    powder: parseValue(powder.value),
+    explosive: parseValue(explosive.value),
+    dynamite: parseValue(dynamite.value),
+    dynamiteA: parseValue(dynamiteA.value),
+    dynamiteB: parseValue(dynamiteB.value),
+    dynamiteC4: parseValue(dynamiteC4.value),
+    dynamiteStiller: parseValue(dynamiteStiller.value)
+  };
+  const countInput = document.getElementById("count");
+  const count = parseValue(countInput.value) || 1;
+
+  const items = [
+    {name:"powder", title:"Порох", sell:prices.powder, cost:prices.powder},
+     {name:"explosive", title:"Взрывчатка", sell:prices.explosive, cost:calcCraftCost("explosive", prices)},
+    {name:"dynamite", title:"Динамит", sell:prices.dynamite, cost:calcCraftCost("dynamite", prices)},
+    {name:"dynamiteA", title:"Динамит A", sell:prices.dynamiteA, cost:calcCraftCost("dynamiteA", prices)},
+    {name:"dynamiteB", title:"Динамит B", sell:prices.dynamiteB, cost:calcCraftCost("dynamiteB", prices)},
+    {name:"dynamiteC4", title:"Динамит C4", sell:prices.dynamiteC4, cost:calcCraftCost("dynamiteC4", prices)},
+     {name:"dynamiteStiller", title:"Динамит Stiller", sell:prices.dynamiteStiller, cost:calcCraftCost("dynamiteStiller", prices)}
+  ].filter(i=>i.sell>0);
+
+   if(prices.dynamiteC4 > 0 && prices.dynamiteB > 0){
+     const c4Cost = calcCraftCost("dynamiteC4", prices);
+     const c4Profit = prices.dynamiteC4 - c4Cost;
+     
+     const twoBCost = 2 * calcCraftCost("dynamiteB", prices);
+     const twoBProfit = 2 * prices.dynamiteB - twoBCost;
+     
+     if(twoBProfit > c4Profit){
+       items.splice(items.findIndex(i => i.name === "dynamiteC4"), 1, {
+         name: "twoDynamiteB", 
+         title: "2 Динамита Б", 
+         sell: 2 * prices.dynamiteB, 
+         cost: twoBCost
+       });
+     }
+   }
+
+  if(items.length===0){result.innerHTML="Введите хотя бы одну цену"; return;}
+
+  let resultHTML = "<u>Сравнение окупа и выгода за 1 предмет:</u><br>";
+  let best = null;
+  items.forEach(i=>{
+    const profit = i.sell - i.cost;
+    resultHTML += `<div class="line">• ${i.title}: ${i.sell.toLocaleString()} (Выгода: ${profit.toLocaleString()})</div>`;
+    if(!best || profit>best.profit) best = {...i, profit};
+  });
+
+  if(best){
+    const total = best.sell * count;
+    resultHTML += `<hr><b>Самое выгодное продавать:</b> ${best.title}<br>`;
+    resultHTML += `Итог за ${count} шт: <span id="total">${total.toLocaleString()}</span> 
+                   <button class="copy-btn" onclick="copyPrice(${total})"><i class="ri-file-copy-line"></i></button><br>`;
+    resultHTML += `<hr><b>Лучший путь крафта:</b><br>${buildBestCraftPath(best.name, prices)}`;
+  }
+
+  result.innerHTML = resultHTML;
+}
+
+function craftDynamite(){
+  const powderCount = parseValue(powderToDynamite.value);
+  const explosiveCount = parseValue(explosiveToDynamite.value);
+  
+  const totalPowder = powderCount + explosiveCount * 9;
+  
+  const dynamite = Math.floor(totalPowder / 5);
+  const leftover = totalPowder % 5;
+  
+  craftResult.innerHTML = `Из этого получится: <b>${dynamite.toLocaleString()}</b> динамита<br>Остаток пороха: <b>${leftover}</b><br><small>1 взрывчатка = 9 пороха</small>`;
+}
+
+function calculatePiston(){
+  const pistonPrice = parseValue(piston.value);
+  const craftPrice = parseValue(wood.value)*3 + parseValue(cobble.value)*4 + parseValue(redstone.value) + parseValue(iron.value);
+  const count = parseValue(pistonCount.value)||1;
+  const bestPrice = Math.max(pistonPrice, craftPrice);
+  const bestName = pistonPrice>craftPrice?"Поршень":"Ресурсы";
+  pistonResult.innerHTML = `Выгоднее продавать: <b>${bestName}</b><br>Цена за 1 шт: <b>${bestPrice.toLocaleString()}</b> 
+                            <button class="copy-btn" onclick="copyPrice(${bestPrice})"><i class="ri-file-copy-line"></i></button><br>
+                            Итог за ${count.toLocaleString()} шт: <b>${(bestPrice*count).toLocaleString()}</b>`;
+}
+</script>
+</body>
+</html>
