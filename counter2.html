@@ -64,7 +64,7 @@ function parseValue(val){
   if(val.endsWith("b")) return parseFloat(val.replace("b",""))*1_000_000_000;
   return parseFloat(val);
 }
-function copyPrice(value){ navigator.clipboard.writeText(value.toString().replace(/\s/g,"")); }
+function copyPrice(value){ navigator.clipboard.writeText("/ah sell " + value.toString().replace(/\s/g,"")); }
 
 function getUrlParams() {
   const urlParams = new URLSearchParams(window.location.search);
